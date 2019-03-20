@@ -1,0 +1,234 @@
+---
+title: "PYlogenetic.diversity"
+author: "Bovendorp, R."
+date: "3/10/2019"
+output: html_document
+---
+---
+title: "Texas A&M Workshop"
+author: "Bovendorp, R."
+date: "March 7th, 2019"
+output: html_document
+---
+  
+####Video showing how to create the phylogenetic tree (phylogenetic distance).
+
+### https://www.youtube.com/watch?v=wPRCLnF2NYk
+  
+  
+First, install the picante and ape packages
+```{r setup, include=FALSE}
+install.packages("picante")
+install.packages("ape")
+library(picante)
+library(ape)
+```
+
+Now setward the directory
+
+```{r setup, include=FALSE}
+setwd("/Users/ricardobovendorp/Dropbox/Funct_Diversity_US/Materials/PD")
+getwd()  
+```
+
+Now you need to download two files: 
+One with sites where you can find the communities of small mammals. 
+Small mammals communities of Southeast Brazil
+
+```{r setup, include=FALSE}
+my.sample <- read.table("Southeast.txt", sep="\t", row.names=1, header=T)
+head(my.sample)
+```
+
+
+
+Load the file with phylogenetic distance matrix for small mammals.
+Phylogenetic distance matrix for small mammals
+
+```{r setup, include=FALSE}
+my.phylo <- read.tree("Phylo_Southeast.txt")
+```
+
+Plot the Phylogenetic tree
+
+```{r setup, include=FALSE}
+par(mfrow = c(1, 1))
+plot(my.phylo, type = "fan", show.tip.label = T,show.node.label = F,edge.color = "gray", edge.width = 1,tip.color = "black")
+```
+
+Calculating the distance of branching between species
+
+```{r setup, include=FALSE}
+branching.times(my.phylo)
+```
+
+Calculating richness. Richness is the number of species in each community.
+
+```{r setup, include=FALSE}
+richness <- rowSums(decostand(my.sample, method="pa", MARGIN=1))
+```
+The original version of Faith’s Index did not include the root of the phylogenetic tree for a community or assemblage, but recently Faith’s Index has been stated to include the root.
+
+```{r setup, include=FALSE}
+pd.no.root <- pd(my.sample, my.phylo, include.root=F)[,1] # 
+```
+
+The rationale for including the root is that it provides more information regarding the long evolutionary history leading up to the species found in the community. 
+
+```{r setup, include=FALSE}
+pd.root <- pd(my.sample, my.phylo, include.root=T)[,1] # 
+```
+
+Calculates mean pairwise distance separating taxa in a community without using the abundance of species in each community.
+
+```{r setup, include=FALSE}
+pw <- mpd(my.sample, cophenetic(my.phylo), abundance.weighted=F) 
+```
+
+Calculates mean pairwise distance separating taxa in a community using the abundance of species in each community.
+
+```{r setup, include=FALSE}
+pw.prime <- mpd(my.sample, cophenetic(my.phylo), abundance.weighted=T) 
+```
+
+The Rao metric was designed as a general dissimilarity metric utilizing a distance matrix between taxa and has been applied to both phylogenetic and trait-based investigations. The primary difference between the Rao metric for within community diversity and the mpd.a calculation is that species i can equal species j. In simple terms, this means that a mean of the lower triangle of a community phylogenetic distance matrix is calculated using the diagonal elements.
+
+Re-scale for RAO calculation by chonos. Needs to calculete RAO
+
+```{r setup, include=FALSE}
+new.tree<-chronos(my.phylo)# Re-scale for RAO calculation by chonos. Needs to calculete RAO
+```
+
+Plot the same phylogenetic tree but with rescaled range.
+
+```{r setup, include=FALSE}
+plot(new.tree, type = "fan", show.tip.label = T,show.node.label = F,edge.color = "gray", edge.width = 1,tip.color = "black")
+```
+
+Calculating the RAo PD metric.
+
+```{r setup, include=FALSE}
+Rao.pw <- raoD(my.sample, new.tree)$Dkk 
+```
+
+The first metric that Helmus et al. [70] produced is called the Phylogenetic Species Variability (PSV), which is expected to calculate the expected variance among species in a community phylogeny for a trait evolving under Brownian motion.This metric does not weight the expected variance by the abundances of the species and has been shown to be exactly half the mpd value when the phylogeny is ultrametric.
+
+```{r setup, include=FALSE}
+helmus.psv <- psv(my.sample, my.phylo)[,1]
+```
+
+The second metric that Helmus et al. [70] produced is called Phylogenetic Species Evenness (PSE), which is identical to mpd.a when the phylogeny is ultrametric with the exception that the phylogeny is scaled from zero to one for PSE and not for mpd (mean pairwise distance).
+
+```{r setup, include=FALSE}
+helmus.pse <- pse(my.sample, my.phylo)[,1]
+```
+
+The final commonly used metric proposed by Helmus et al. [70] is called the Phylogenetic Species Richness,  which is equivalent to multiplying mpd (mean pairwise distance) by the number of species in the community. 
+
+```{r setup, include=FALSE}
+helmus.psr <- psr(my.sample, my.phylo)[,1]
+```
+
+Calculates MNTD (mean nearest taxon distance) for taxa in a community without using the abundance of species in each community.
+
+```{r setup, include=FALSE}
+nn <- mntd(my.sample, cophenetic(my.phylo), abundance.weighted=F) 
+```
+
+Calculates MNTD (mean nearest taxon distance) for taxa in a community using the abundance of species in each community
+
+```{r setup, include=FALSE}
+nn.prime <- mntd(my.sample, cophenetic(my.phylo), abundance.weighted=T) 
+```
+
+Combine all results in a dataframe
+
+```{r setup, include=FALSE}
+outputs <- as.data.frame(cbind(richness, pd.no.root, pd.root,pw,pw.prime,Rao.pw, helmus.psv, 
+                               helmus.pse, helmus.psr, nn, nn.prime))
+```
+
+Getting nampes for each PD values
+
+```{r setup, include=FALSE}
+names(outputs) <- c("Richness", "PD.No.Root", "PD.Root", "MPD", "MPD.abund", "Rao", "Helmus.PSV", 
+                    "Helmus.PSE", "Helmus.PSR", "MNTD", "MNTD.abund")
+```
+
+Plot outputs
+
+```{r setup, include=FALSE}
+plot(outputs, pch = 16)
+```
+
+Instal the packege (corrplot) to calculate the correlation for the results
+
+```{r setup, include=FALSE}
+install.packages("corrplot")
+library(corrplot)
+```
+
+Getting the correlation for results
+
+```{r setup, include=FALSE}
+par(mfrow = c(1,1)) 
+XLZ<-cor(outputs, method = "pearson", use = "complete.obs")
+corrplot(XLZ, type = "upper", order = c("original"), is.corr = TRUE,
+         tl.col = "black", tl.srt = 45, method = c("number"))
+```
+
+Reorder by importance of correlation by  order = c("AOE")
+
+```{r setup, include=FALSE}
+corrplot(XLZ, type = "upper", order = c("AOE"), is.corr = TRUE,
+         tl.col = "black", tl.srt = 45, method = c("number"))
+```
+
+Instal the packege (PerformanceAnalytic) to visualize better the results with numbers and plot the chart correlation
+
+```{r setup, include=FALSE}
+install.packages("PerformanceAnalytics")
+library(PerformanceAnalytics)
+```
+
+#Plot the chart correlation
+
+```{r setup, include=FALSE}
+chart.Correlation(XLZ, histogram=TRUE, pch=19)
+```
+
+
+
+```{r setup, include=FALSE}
+outputs2<-as.data.frame(cbind(richness, pd.no.root, pd.root,pw,pw.prime,Rao.pw, helmus.psv, 
+                              helmus.pse, helmus.psr, nn, nn.prime))
+```
+
+Getting nampes for each PD values
+
+```{r setup, include=FALSE}
+names(outputs2) <- c("Richness", "PD.No.Root", "PD.Root", "MPD", "MPD.abund", "Rao", "Helmus.PSV", 
+                     "Helmus.PSE", "Helmus.PSR", "MNTD", "MNTD.abund")
+```
+
+Saving the data in CSV format
+
+```{r setup, include=FALSE}
+write.csv(outputs2, file ="outputs2.csv",fileEncoding = "macroman")
+```
+
+Install the packages ("WriteXLS") to save in excel format
+
+```{r setup, include=FALSE}
+install.packages("WriteXLS")
+library(WriteXLS)
+```
+
+Saving the data in Excel format
+
+```{r setup, include=FALSE}
+WriteXLS("outputs2", "PD_outputs2.xls",row.names = TRUE, col.names = TRUE, Encoding = c("UTF-8"))
+```
+
+########## THE END  ########################
+

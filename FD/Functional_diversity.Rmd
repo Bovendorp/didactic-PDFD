@@ -1,0 +1,512 @@
+---
+title: "Texas A&M Workshop"
+author: "Bovendorp, R."
+date: "March 7th, 2019"
+output: html_document
+---
+
+In this excercise we will learn how to calculate the functional diversity using the book - Functional and Phylogenetic diversity in R by Nathan G. Swenson 
+First, install packages below
+
+```{r setup, include=FALSE}
+install.packages("picante")
+install.packages("ade4")
+install.packages("vegan")
+install.packages("geometry")
+install.packages("FD")
+install.packages("fBasics")
+install.packages("SYNCSA")
+install.packages("nlme")
+install.packages("ape")
+library(picante)
+library(ade4)
+library(vegan)
+library(geometry)
+library(FD)
+library(fBasics)
+library(SYNCSA)
+library(nlme)
+library(ape)
+```
+
+
+Now that we have all packages installed, we will setward the workspace.
+
+```{r setup, include=FALSE}
+setwd("~/Dropbox/Funct_Diversity_US/Materials/FD")
+getwd()
+
+```
+
+Now we need to download two files: 
+One with sites where you can find these communities of small mammals (Total.func.presence.R.2.txt).
+Load the files (the first column, with the names of communities or species, will be used to give names to rows)
+
+```{r setup, include=FALSE}
+my.sample <- read.table("Total.func.presence.R.2.txt", header = T, row.names = 1) #communities 
+```
+
+Load the file with ecological traits for small mammals (all.traits.clean.ok.named.2.txt).
+Load the 'traits' file
+
+```{r setup, include=FALSE}
+traits<- read.table("all.traits.clean.ok.named.2.txt", header = T, row.names = 1) #species-by-trait
+```
+
+Now we need to transform 'community' file as matrix
+
+```{r setup, include=FALSE}
+my.sample2<-as.matrix(my.sample)
+```
+
+
+Just to explore some ecological index, lets calculate the species accumulation curve
+```{r setup, include=FALSE}
+spp<-specaccum(my.sample2)
+plot(spp)
+```
+
+Shannon Index
+The Shannon index is an information statistic index, which means it assumes all species 
+are represented in a sample and that they are randomly sampled. 
+
+```{r setup, include=FALSE}
+shan<-diversity(my.sample2, index = "shannon")
+```
+
+Simpson Index
+The Simpson index is a dominance index because it gives more weight to common or dominant species.
+In this case, a few rare species with only a few representatives will not affect the diversity.
+
+```{r setup, include=FALSE}
+simp<-diversity(my.sample2, index = "simpson")
+```
+
+Fisher Index
+This is a parametric index of diversity that assumes that the abundance of species follows the log series distribution
+
+```{r setup, include=FALSE}
+fish<-fisher.alpha(my.sample2)
+```
+
+Let generate panels with 1 row of 3 graphs and compare the 3 Indexes
+
+```{r setup, include=FALSE}
+par(mfrow = c(1, 3))  
+hist(shan)
+hist(simp)
+hist(fish)
+```
+
+Lets chek if species names are the same in the two matrices
+```{r setup, include=FALSE}
+sum(row.names(traits) %in% colnames(my.sample2)) == ncol(my.sample2)
+```
+
+Instal the GGBIPLOT function
+
+https://github.com/vqv/ggbiplot/blob/master/ggbiplot.Rproj
+
+
+```{r setup, include=FALSE}
+ggbiplot <- function(pcobj, choices = 1:2, scale = 1, pc.biplot = TRUE, 
+                      obs.scale = 1 - scale, var.scale = scale, 
+                      groups = NULL, ellipse = FALSE, ellipse.prob = 0.68, 
+                      labels = NULL, labels.size = 3, alpha = 1, 
+                      var.axes = TRUE, 
+                      circle = FALSE, circle.prob = 0.69, 
+                      varname.size = 3, varname.adjust = 1.5, 
+                      varname.abbrev = FALSE, ...)
+{
+  library(ggplot2)
+  library(plyr)
+  library(scales)
+  library(grid)
+
+  stopifnot(length(choices) == 2)
+
+  # Recover the SVD
+ if(inherits(pcobj, 'prcomp')){
+    nobs.factor <- sqrt(nrow(pcobj$x) - 1)
+    d <- pcobj$sdev
+    u <- sweep(pcobj$x, 2, 1 / (d * nobs.factor), FUN = '*')
+    v <- pcobj$rotation
+  } else if(inherits(pcobj, 'princomp')) {
+    nobs.factor <- sqrt(pcobj$n.obs)
+    d <- pcobj$sdev
+    u <- sweep(pcobj$scores, 2, 1 / (d * nobs.factor), FUN = '*')
+    v <- pcobj$loadings
+  } else if(inherits(pcobj, 'PCA')) {
+    nobs.factor <- sqrt(nrow(pcobj$call$X))
+    d <- unlist(sqrt(pcobj$eig)[1])
+    u <- sweep(pcobj$ind$coord, 2, 1 / (d * nobs.factor), FUN = '*')
+    v <- sweep(pcobj$var$coord,2,sqrt(pcobj$eig[1:ncol(pcobj$var$coord),1]),FUN="/")
+  } else if(inherits(pcobj, "lda")) {
+      nobs.factor <- sqrt(pcobj$N)
+      d <- pcobj$svd
+      u <- predict(pcobj)$x/nobs.factor
+      v <- pcobj$scaling
+      d.total <- sum(d^2)
+  } else {
+    stop('Expected a object of class prcomp, princomp, PCA, or lda')
+  }
+
+  # Scores
+  choices <- pmin(choices, ncol(u))
+  df.u <- as.data.frame(sweep(u[,choices], 2, d[choices]^obs.scale, FUN='*'))
+
+  # Directions
+  v <- sweep(v, 2, d^var.scale, FUN='*')
+  df.v <- as.data.frame(v[, choices])
+
+  names(df.u) <- c('xvar', 'yvar')
+  names(df.v) <- names(df.u)
+
+  if(pc.biplot) {
+    df.u <- df.u * nobs.factor
+  }
+
+  # Scale the radius of the correlation circle so that it corresponds to 
+  # a data ellipse for the standardized PC scores
+  r <- sqrt(qchisq(circle.prob, df = 2)) * prod(colMeans(df.u^2))^(1/4)
+
+  # Scale directions
+  v.scale <- rowSums(v^2)
+  df.v <- r * df.v / sqrt(max(v.scale))
+
+  # Change the labels for the axes
+  if(obs.scale == 0) {
+    u.axis.labs <- paste('standardized PC', choices, sep='')
+  } else {
+    u.axis.labs <- paste('PC', choices, sep='')
+  }
+
+  # Append the proportion of explained variance to the axis labels
+  u.axis.labs <- paste(u.axis.labs, 
+                       sprintf('(%0.1f%% explained var.)', 
+                               100 * pcobj$sdev[choices]^2/sum(pcobj$sdev^2)))
+
+  # Score Labels
+  if(!is.null(labels)) {
+    df.u$labels <- labels
+  }
+
+  # Grouping variable
+  if(!is.null(groups)) {
+    df.u$groups <- groups
+  }
+
+  # Variable Names
+  if(varname.abbrev) {
+    df.v$varname <- abbreviate(rownames(v))
+  } else {
+    df.v$varname <- rownames(v)
+  }
+
+  # Variables for text label placement
+  df.v$angle <- with(df.v, (180/pi) * atan(yvar / xvar))
+  df.v$hjust = with(df.v, (1 - varname.adjust * sign(xvar)) / 2)
+
+  # Base plot
+  g <- ggplot(data = df.u, aes(x = xvar, y = yvar)) + 
+          xlab(u.axis.labs[1]) + ylab(u.axis.labs[2]) + coord_equal()
+
+  if(var.axes) {
+    # Draw circle
+    if(circle) 
+    {
+      theta <- c(seq(-pi, pi, length = 50), seq(pi, -pi, length = 50))
+      circle <- data.frame(xvar = r * cos(theta), yvar = r * sin(theta))
+      g <- g + geom_path(data = circle, color = muted('white'), 
+                         size = 1/2, alpha = 1/3)
+    }
+
+    # Draw directions
+    g <- g +
+      geom_segment(data = df.v,
+                   aes(x = 0, y = 0, xend = xvar, yend = yvar),
+                   arrow = arrow(length = unit(1/2, 'picas')), 
+                   color = muted('red'))
+  }
+
+  # Draw either labels or points
+  if(!is.null(df.u$labels)) {
+    if(!is.null(df.u$groups)) {
+      g <- g + geom_text(aes(label = labels, color = groups), 
+                         size = labels.size)
+    } else {
+      g <- g + geom_text(aes(label = labels), size = labels.size)      
+    }
+  } else {
+    if(!is.null(df.u$groups)) {
+      g <- g + geom_point(aes(color = groups), alpha = alpha)
+    } else {
+      g <- g + geom_point(alpha = alpha)      
+    }
+  }
+
+  # Overlay a concentration ellipse if there are groups
+  if(!is.null(df.u$groups) && ellipse) {
+    theta <- c(seq(-pi, pi, length = 50), seq(pi, -pi, length = 50))
+    circle <- cbind(cos(theta), sin(theta))
+
+    ell <- ddply(df.u, 'groups', function(x) {
+      if(nrow(x) <= 2) {
+        return(NULL)
+      }
+      sigma <- var(cbind(x$xvar, x$yvar))
+      mu <- c(mean(x$xvar), mean(x$yvar))
+      ed <- sqrt(qchisq(ellipse.prob, df = 2))
+      data.frame(sweep(circle %*% chol(sigma) * ed, 2, mu, FUN = '+'), 
+                 groups = x$groups[1])
+    })
+    names(ell)[1:2] <- c('xvar', 'yvar')
+    g <- g + geom_path(data = ell, aes(color = groups, group = groups))
+  }
+
+  # Label the variable axes
+  if(var.axes) {
+    g <- g + 
+    geom_text(data = df.v, 
+              aes(label = varname, x = xvar, y = yvar, 
+                  angle = angle, hjust = hjust), 
+              color = 'darkred', size = varname.size)
+  }
+  # Change the name of the legend for groups
+  # if(!is.null(groups)) {
+  #   g <- g + scale_color_brewer(name = deparse(substitute(groups)), 
+  #                               palette = 'Dark2')
+  # }
+
+  # TODO: Add a second set of axes
+
+  return(g)
+}
+```
+
+Instal the other packeges below to expore the principal components for traits
+
+```{r setup, include=FALSE}
+install.packages("FactoMineR")
+install.packages("devtools")
+library(FactoMineR)
+library(devtools)
+```
+
+Lets calculate the principal components for all traits the we have and plot using ggbiplot
+
+```{r setup, include=FALSE}
+par(mfrow = c(1,1))
+trait.pca<-prcomp(traits, scale. = T)
+ggbiplot(trait.pca, obs.scale = 1, var.scale = 1, circle = T)
+```
+
+
+
+Let sclude the less important varialbes (Nocturnal and Aquatic).
+
+```{r setup, include=FALSE}
+traits$nocturnal <- NULL
+traits$aquatic<-NULL
+```
+
+Lets calculate de PCA again for the traits excuding nocturnal and aquatic variables
+
+```{r setup, include=FALSE}
+trait.pca<-prcomp(traits, scale. = T)
+ggbiplot(trait.pca, obs.scale = 1, var.scale = 1, circle = T)
+```
+
+Lets insert (nocturnal and aquatic) as traits again in the matrix
+
+```{r setup, include=FALSE}
+traits<- read.table("all.traits.clean.ok.named.2.txt", header = T, row.names = 1) #species-by-trait
+traits1<-as.matrix(traits)
+```
+
+Choosing the distance we will use.
+Do not use Euclidean distance with mixed matrices (with binary and continuous variables, for example) see Podani & Schmera (2006) On dendrogram-based measures of functional diversity. Oikos 115: 179-185. 
+See also  Pavoine et al. (2009)
+For Gower index | using vegdist ()
+In this case, it is not necessary to standardize the data because the vegdist () function using the "gower" method,automatically adjusting (standardization by the "range"),gowdis computes the Gower (1971) similarity coefficient exactly as described by Podani (1999),then converts it to a dissimilarity coefficient by using D = 1 - S. It integrates variable weights as described by Legendre and Legendre (1998)
+other distances??
+?vegdist ()
+----------------------------------
+
+Use this distance matrix to construct a dendrogram that represents the similarity/dissimilarity among species according to their ecological traits.
+Let's comparing different measurements of traits distances
+
+Here we use the Gower distance for traits
+
+```{r setup, include=FALSE}
+traits2 <- vegdist(traits, "gower")
+tree.traits2<-hclust(traits2, method = "complete")
+plot(tree.traits2,main = "Cluster Dendogram Gower")
+```
+
+Here we use the Euclidean distances method for traits
+
+```{r setup, include=FALSE}
+traits3 <- vegdist (traits, method = "euclidean")
+tree.traits3<-hclust(traits3, method = "complete")
+plot(tree.traits3, main = "Cluster Dendogram Euclidian")
+```
+
+Plot the Gower and Euclidean distances in the Histogram to copare it.
+
+```{r setup, include=FALSE}
+par(mfrow = c(1,2)) 
+hist(traits2)
+hist(traits3)
+```
+Now we have to transform gower distnces into a matrix
+
+```{r setup, include=FALSE}
+traits5<-as.matrix(traits2)
+```
+
+Calculating richness. Richness is the number of species in each community.
+
+```{r setup, include=FALSE}
+richness <- rowSums(decostand(my.sample2, method = "pa", MARGIN = 1))
+```
+
+Calculating the mean pairwise distance separating taxa in a community without using the abundance of species in each community.
+
+```{r setup, include=FALSE}
+pw<- mpd(my.sample2, as.matrix(dist(traits5)), abundance.weighted = F)
+```
+
+Calculating mean pairwise distance separating taxa in a community using the abundance of species in each community.
+
+```{r setup, include=FALSE}
+pw.prime <- mpd(my.sample2, as.matrix(dist(traits5)), abundance.weighted = T)
+```
+
+Calculating MNTD (mean nearest taxon distance) for taxa in a community without using the abundance of species in each community.
+
+```{r setup, include=FALSE}
+nn <- mntd(my.sample2, as.matrix(dist(traits5)), abundance.weighted = F)
+```
+
+Calculating MNTD (mean nearest taxon distance) for taxa in a community using the abundance of species in each community
+
+```{r setup, include=FALSE}
+nn.prime <-mntd(my.sample2, as.matrix(dist(traits5)), abundance.weighted = T)
+```
+
+Functional richness (FRic). FR indices measure how much of the niche space is occupied by the species present.
+FR is naturally positively correlated to the number of species present (the more species there are, the larger the functional space occupied when species traits are somewhat randomly distributed).FR is not weighted by species abundance.
+
+```{r setup, include=FALSE}
+fric <- dbFD(traits5[colnames(my.sample2), ], my.sample2, w.abun = T, stand.x = T)$FRic
+```
+
+Functional evenness (FEve). FE indices measure whether mean species traits are distributed regularly within the occupied trait space, i.e. with equal distances between nearest neighbors and equal abundances (a high FE index usually means a very regular distribution; a low FE index, the existence of separate clouds of species and/or abundances). FE indices are generally used to indicate under/over-utilization of resources and thus again productivity, reliability and vulnerability to invasion (Mason et al. 2005). This index group includes species’ abundances in its calculation.
+
+```{r setup, include=FALSE}
+feve <- dbFD(traits5[colnames(my.sample2), ], my.sample2, w.abun = T, stand.x = T)$FEve
+```
+
+Functional divergence (FDiv). FD indices, finally, measure the variance of the species’ functions and the position of theirclusters in trait space (a high FD is caused by the clustering of species and/or abundances at the edges of the traits’ space). FD indices find application for indicating the degree of resource differentiation and thus competition (Mason et al. 2005), but they can also indicate a predominance of extreme species. As FE, FD includes species’ abundances in its calculation.
+
+```{r setup, include=FALSE}
+fdiv <- dbFD(traits5[colnames(my.sample2), ], my.sample2, w.abun = T, stand.x = T)$FDiv
+```
+
+Functional dispersion (FDis). This metric calculates the distance of each species from the centroid of the community traits. Thus it is no quite the sam calculation as th pairwise distance between species we can expect that in might be highly correlated. Fdis it is a clearer indicator of trait dispersion in a community.
+
+```{r setup, include=FALSE}
+fdis <- dbFD(traits5[colnames(my.sample2), ], my.sample2, w.abun = T, stand.x = T)$FDis
+```
+
+Rao Entropy (RAO). The most common multivariate index of FD is Rao’s quadratic entropy FDQ (Rao 1982, Champely and Chessel 2002, Ricotta 2005). This index calculates the abundance-weighted variance of the dissimilarities between all species pairs. It is based on the Simpson Diversity Index (Simpson 1949) to calculate species diversity and weighs the trait- based distances between pairs of species ( dist(s, s')) by the product of their relative abundances. Lepš et al. (2006) suggest calculating the species’ pairwise dissimilarities through the sum of their overlaps for each trait. Regardless the Simpson Diversity Index, and the RAO-FD, this equation turns out the Functional Redundancy for each community.
+
+```{r setup, include=FALSE}
+Rao.pw <- rao.diversity(my.sample2, traits=traits5)
+```
+
+Faster way to calculate all metrics
+
+```{r setup, include=FALSE}
+FastFD <- dbFD(traits5, my.sample2)
+```
+
+Combine all results in a dataframe
+
+```{r setup, include=FALSE}
+outputs <- as.data.frame(cbind(richness, pw, pw.prime, nn, nn.prime, fric, feve, fdiv, fdis, Rao.pw$FunRao))
+```
+
+Getting names and ploting outputs to compere one to each ohter
+
+```{r setup, include=FALSE}
+names(outputs) <- c("Richness", "PW_no_abund", "PW_abund", "NN_no_abund", "NN_abund", "FRIC", "FEVE", 
+                    "FDIV", "FDIS", "Rao")
+plot(outputs, pch = 16)
+```
+
+Instal the packege (corrplot) to calculate the correlation for the results
+```{r setup, include=FALSE}
+install.packages("corrplot")
+library(corrplot)
+```
+
+Calculating the correlation for results
+
+```{r setup, include=FALSE}
+par(mfrow = c(1,1)) 
+XLZ<-cor(outputs, method = "pearson", use = "complete.obs")
+corrplot(XLZ, type = "upper", order = c("original"), is.corr = TRUE,
+         tl.col = "black", tl.srt = 45, method = c("number"))
+```
+
+Reorder by importance of correlation by  order = c("AOE")
+
+```{r setup, include=FALSE}
+corrplot(XLZ, type = "upper", order = c("AOE"), is.corr = TRUE,
+         tl.col = "black", tl.srt = 45, method = c("number"))
+```
+
+Instal the packege (PerformanceAnalytic) to visualize better the results with numbers and plot the chart correlation
+
+```{r setup, include=FALSE}
+install.packages("PerformanceAnalytics")
+library(PerformanceAnalytics)
+```
+
+Visualizing better the results with numbers and plot the chart correlation
+
+```{r setup, include=FALSE}
+chart.Correlation(XLZ,method = "pearson", histogram = T, pch="+")
+```
+
+
+Getting nampes for each FD values
+
+```{r setup, include=FALSE}
+outputs2<-as.data.frame(cbind(richness, pw, pw.prime, nn, nn.prime, fric, feve, fdiv, fdis, Rao.pw$Simpson, Rao.pw$FunRao, Rao.pw$FunRedundancy))
+names(outputs2) <- c("Richness", "PW_no_abund", "PW_abund", "NN_no_abund", "NN_abund", "FRIC", "FEVE", 
+                     "FDIV", "FDIS", "Rao_Simpson", "RAO_FUN", "Rao_Redundancy")
+```
+
+Saving the data in CSV format
+
+```{r setup, include=FALSE}
+write.csv(outputs2, file ="outputs2.csv",fileEncoding = "macroman")
+```
+
+Install the packages ("WriteXLS") to save in excel format
+
+```{r setup, include=FALSE}
+install.packages("WriteXLS")
+library(WriteXLS)
+```
+
+Saving the data in Excel format
+```{r setup, include=FALSE}
+WriteXLS("outputs2", "FD_outputs2.xls",row.names = TRUE, col.names = TRUE, Encoding = c("UTF-8"))
+```
+
+
+#########      THE END   ###########################
